@@ -45,7 +45,7 @@ All six models were evaluated on a held-out 20% test set and with 5-fold cross-v
 |---|---|---|---|---|---|
 | **Random Forest** | 5.08 | **8.97** | **0.930** | **9.70** | 0.25 |
 | XGBoost | 5.81 | 9.28 | 0.925 | 9.88 | 0.28 |
-| MLP (Deep Learning) | 7.70 | 11.80 | 0.879 | 12.17 | 0.23 |
+| MLP (Deep Learning) | 7.80 | 11.86 | 0.878 | 12.11 | 0.20 |
 | Decision Tree | 6.09 | 11.81 | 0.879 | 12.54 | 0.30 |
 | Gradient Boosting | 8.50 | 12.33 | 0.868 | 12.79 | 0.15 |
 | Linear Regression | 13.21 | 17.38 | 0.738 | 17.70 | 0.25 |
@@ -56,9 +56,12 @@ gradient-boosted and bagged **tree ensembles remain strong baselines for tabular
 over Linear Regression confirms that the relationship between material descriptors and Tc is **strongly
 nonlinear**.
 
-> **Note on data leakage.** About **28.7%** of the feature rows are exact duplicates. After removing them,
-> Random Forest drops to **R² ≈ 0.911** — so the leakage-controlled figure is the more honest estimate,
-> and near-duplicate compositions likely inflate the headline number further.
+> **Note on data leakage (important).** The 21,263 measurements span only **15,542 distinct chemical
+> formulas**, so a random split shares compositions between train and test. Under a rigorous
+> **composition-grouped split** (no formula shared across partitions, using `GroupShuffleSplit` /
+> `GroupKFold` on the formulas in `unique_m.csv`), Random Forest drops only slightly to **R² ≈ 0.913**
+> and the model ranking is preserved — evidence that the models generalize to genuinely unseen
+> compositions. The grouped figure is the honest, leakage-controlled estimate.
 
 ---
 
@@ -103,9 +106,10 @@ ML can meaningfully predict superconducting critical temperature from material d
 ## Files
 
 - `predicting_critical_temperature_ml.ipynb` — main project notebook (with executed outputs)
-- `paper.tex` — LaTeX source of the accompanying paper
-- `paper.pdf` — compiled paper
-- `train.csv.zip` — dataset (UCI Superconductivity Data)
+- `paper.tex` / `paper.pdf` — LaTeX source and compiled paper
+- `APPLICATION.md` — abstract, summary, and contribution statement for program/competition applications
+- `train.csv.zip` — descriptor dataset (UCI Superconductivity Data)
+- `unique_m.csv.zip` — chemical formulas, aligned 1:1 with `train.csv` (used for the leakage-free split)
 
 ---
 

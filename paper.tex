@@ -57,15 +57,18 @@ evaluated on a public superconductivity dataset ($21{,}263$ samples after cleani
 train--test split and 5-fold cross-validation. Random Forest achieved the strongest performance
 (cross-validated RMSE $\approx 9.70$~K, test $R^2 \approx 0.930$), narrowly ahead of XGBoost
 (CV-RMSE $\approx 9.88$~K), while the deep MLP placed in the middle of the field
-(test $R^2 \approx 0.879$) and Linear Regression performed weakest ($R^2 \approx 0.738$), indicating a
+(test $R^2 \approx 0.878$) and Linear Regression performed weakest ($R^2 \approx 0.738$), indicating a
 strongly nonlinear relationship between descriptors and $T_c$ on which tree ensembles remain especially
 strong. Impurity-based and permutation feature importance agree that thermal-conductivity-,
 atomic-mass-, and valence-related descriptors are the most informative predictors, and Principal
 Component Analysis confirms that the dataset contains non-random structure related to $T_c$. We
-additionally quantify a data-leakage risk: $28.7\%$ of feature rows are exact duplicates, and removing
-them lowers Random Forest performance to $R^2 \approx 0.911$, so the leakage-controlled figure is the
-more conservative estimate. We discuss the limitations of this proof-of-concept pipeline and outline
-directions for developing it into a screening tool for candidate superconducting materials.
+additionally address a data-leakage risk: the $21{,}263$ measurements span only $15{,}542$ distinct chemical
+formulas, so a random split shares compositions between train and test. Under a rigorous composition-grouped
+split (no chemical formula shared across partitions), Random Forest performance declines only modestly, from
+$R^2 \approx 0.930$ to $R^2 \approx 0.913$, and the model ranking is preserved --- indicating that the
+models generalize to genuinely unseen compositions. We discuss the limitations of this proof-of-concept
+pipeline and outline directions for developing it into a screening tool for candidate superconducting
+materials.
 
 \vspace{0.6em}
 \noindent\textit{Keywords:} superconductivity; critical temperature; machine learning; random forest;
@@ -154,8 +157,14 @@ to visualize the two-dimensional structure of the dataset with respect to critic
 \subsection{Duplicate and Leakage Analysis}
 Engineered superconductivity descriptors are known to contain many near-identical compositions. Because a
 random train--test split can place near-duplicate materials in both partitions and leak information, we
-counted exact-duplicate feature rows and re-evaluated the best model on a deduplicated version of the
-dataset as a conservative robustness check.
+performed two robustness checks. First, we counted exact-duplicate feature rows and re-evaluated the best
+model on a deduplicated dataset. Second, and more rigorously, we obtained the chemical formula of each
+material from the companion \texttt{unique\_m.csv} file (which aligns one-to-one with the descriptor rows)
+and performed a \emph{composition-grouped} split: all measurements sharing a chemical formula were kept
+entirely within either the training or the test partition, so that no formula appears in both. All six
+models were re-trained and re-evaluated under this leakage-free protocol using \texttt{GroupShuffleSplit}
+for the held-out test set and \texttt{GroupKFold} for 5-fold cross-validation, both keyed on the chemical
+formula.
 
 % ---------- 3. Results ----------
 \section{Results}
@@ -165,7 +174,7 @@ Table~\ref{tab:models} summarizes the performance of all six models on the test 
 cross-validation. Random Forest achieved the best overall performance (test MAE $=5.08$~K,
 RMSE $=8.97$~K, $R^2 = 0.930$; CV-RMSE $=9.70 \pm 0.25$~K), closely followed by XGBoost
 (CV-RMSE $=9.88 \pm 0.28$~K); the two tree ensembles are statistically very close. The deep MLP placed in
-the middle of the field (test $R^2 = 0.879$, CV-RMSE $=12.17 \pm 0.23$~K), outperforming a single Decision
+the middle of the field (test $R^2 = 0.878$, CV-RMSE $=12.11 \pm 0.20$~K), outperforming a single Decision
 Tree and Gradient Boosting on cross-validated RMSE but not matching the leading tree ensembles. Linear
 Regression performed markedly worse than all nonlinear models ($R^2 = 0.738$, CV-RMSE $=17.70$~K).
 
@@ -180,7 +189,7 @@ Regression performed markedly worse than all nonlinear models ($R^2 = 0.738$, CV
 \midrule
 Random Forest        & 5.076 & 80.452  & 8.970  & 0.930 & 9.700  & 0.253 \\
 XGBoost              & 5.811 & 86.037  & 9.276  & 0.925 & 9.876  & 0.280 \\
-MLP (Deep Learning)  & 7.697 & 139.165 & 11.797 & 0.879 & 12.173 & 0.226 \\
+MLP (Deep Learning)  & 7.795 & 140.725 & 11.863 & 0.878 & 12.114 & 0.201 \\
 Decision Tree        & 6.090 & 139.449 & 11.809 & 0.879 & 12.539 & 0.296 \\
 Gradient Boosting    & 8.501 & 152.150 & 12.335 & 0.868 & 12.794 & 0.149 \\
 Linear Regression    & 13.211& 302.008 & 17.378 & 0.738 & 17.699 & 0.253 \\
@@ -283,10 +292,45 @@ variance implies this two-dimensional view captures only part of the dataset's c
 A large fraction of the dataset consists of exact-duplicate feature vectors: $6{,}093$ of $21{,}263$ rows
 ($28.7\%$) are exact duplicates of another row in feature space. Removing these duplicates leaves $15{,}170$
 unique rows. Retraining Random Forest on this deduplicated dataset lowers performance from
-$R^2 = 0.930$ (RMSE $8.97$~K) to $R^2 = 0.911$ (RMSE $10.01$~K). Because this check removes only
-\emph{exact} duplicates and not the many additional \emph{near}-duplicate compositions, the true
-leakage-controlled performance is likely somewhat lower still, and the deduplicated figure should be
-regarded as the more conservative and honest estimate.
+$R^2 = 0.930$ (RMSE $8.97$~K) to $R^2 = 0.911$ (RMSE $10.01$~K).
+
+The stronger check is the composition-grouped split. The $21{,}263$ measurements correspond to only
+$15{,}542$ distinct chemical formulas --- some formulas (e.g., \texttt{Y1Ba2Cu3O7}) appear over one hundred
+times --- so a random split shares many formulas between train and test. Under the leakage-free
+composition-grouped split (no formula shared across partitions; $4{,}274$ test measurements),
+performance drops only modestly, confirming that the models genuinely generalize to unseen compositions
+rather than merely memorizing repeated ones. Table~\ref{tab:grouped} reports all six models under both
+protocols. Random Forest, the best model, declines from $R^2 = 0.930$ to $R^2 = 0.913$
+(RMSE $8.97 \to 10.08$~K, grouped CV-RMSE $9.94$~K), and the overall model ranking is preserved. We regard
+the composition-grouped figures as the honest, leakage-controlled estimates of real-world screening
+performance.
+
+\begin{table}[htbp]
+\centering
+\caption{Random (leaky) versus composition-grouped (leakage-free) evaluation. Grouped columns use a
+formula-keyed \texttt{GroupShuffleSplit} test set and \texttt{GroupKFold} cross-validation; models sorted by
+grouped CV-RMSE.}
+\label{tab:grouped}
+\begin{tabular}{l S[table-format=1.3] S[table-format=1.3] S[table-format=2.3] S[table-format=2.3] S[table-format=2.3]}
+\toprule
+ & \multicolumn{2}{c}{\textbf{Test $R^2$}} & \multicolumn{2}{c}{\textbf{Test RMSE (K)}}
+ & {\textbf{Grouped}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+\textbf{Model} & {\textbf{Random}} & {\textbf{Grouped}} & {\textbf{Random}} & {\textbf{Grouped}}
+ & {\textbf{CV-RMSE}} \\
+\midrule
+Random Forest        & 0.930 & 0.913 & 8.970  & 10.077 & 9.938  \\
+XGBoost              & 0.925 & 0.909 & 9.276  & 10.321 & 10.001 \\
+MLP (Deep Learning)  & 0.878 & 0.858 & 11.863 & 12.885 & 12.232 \\
+Gradient Boosting    & 0.868 & 0.854 & 12.335 & 13.049 & 12.796 \\
+Decision Tree        & 0.879 & 0.853 & 11.809 & 13.099 & 13.376 \\
+Linear Regression    & 0.738 & 0.726 & 17.378 & 17.877 & 17.639 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Because this check removes leakage at the level of the chemical formula, the grouped figures should be
+regarded as the primary, honest estimate; the small size of the drop is itself an encouraging result.
 
 % ---------- 4. Discussion ----------
 \section{Discussion and Limitations}
@@ -301,11 +345,11 @@ these results.
   \item The dataset uses engineered statistical descriptors rather than direct experimental or
         first-principles physical measurements, which limits the physical interpretability of the learned
         relationships.
-  \item A large fraction of rows are exact-duplicate feature vectors ($28.7\%$), and many more are
-        near-duplicates. A random split therefore leaks similar compositions across train and test and can
-        optimistically bias reported performance; the deduplicated result in Section~3.6 partially
-        quantifies this effect, but a fully composition-grouped split would be required to remove it
-        entirely.
+  \item A large fraction of rows are exact-duplicate feature vectors ($28.7\%$), and the $21{,}263$
+        measurements span only $15{,}542$ distinct chemical formulas, so a random split leaks similar
+        compositions across train and test. We address this directly with a composition-grouped split
+        (Section~3.6); the residual $R^2$ drop is small, but grouped performance ($R^2 \approx 0.913$ for
+        Random Forest) should be read as the realistic estimate rather than the random-split figure.
   \item Feature importance and correlation analysis identify statistically predictive descriptors but do
         not establish causal physical mechanisms, particularly given the strong multicollinearity among
         thermal-conductivity-related features.
@@ -343,9 +387,11 @@ magnitude of improvement over the linear baseline indicates that the relationshi
 descriptors and critical temperature is strongly nonlinear. Impurity-based and permutation feature
 importance, correlation analysis, and PCA visualization consistently point to thermal-conductivity-,
 valence-, mass-, and radius-related descriptors as informative predictors, though these findings should be
-interpreted as statistical associations rather than confirmed physical mechanisms. A duplicate analysis
-further shows that some of the headline accuracy reflects near-duplicate compositions shared across the
-split, so the leakage-controlled estimate ($R^2 \approx 0.911$) is the more conservative figure. Overall,
+interpreted as statistical associations rather than confirmed physical mechanisms. Crucially, a
+composition-grouped evaluation --- in which no chemical formula is shared between training and test ---
+shows that the models generalize to genuinely unseen compositions, with Random Forest declining only from
+$R^2 \approx 0.930$ to $R^2 \approx 0.913$; we regard this leakage-controlled figure as the honest estimate
+of real-world screening performance. Overall,
 this work serves as a proof-of-concept pipeline for machine-learning-assisted superconductor screening and
 provides a foundation for future extensions toward more physically grounded materials discovery workflows.
 
