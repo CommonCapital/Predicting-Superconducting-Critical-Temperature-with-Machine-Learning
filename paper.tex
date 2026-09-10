@@ -1,0 +1,379 @@
+\documentclass[11pt]{article}
+
+% ---------- Packages ----------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{siunitx}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{titlesec}
+\usepackage[hidelinks]{hyperref}
+
+% Absorb slack from long monospace tokens in justified text (avoids overfull boxes)
+\emergencystretch=3em
+\hbadness=10000
+
+% ---------- Style ----------
+\definecolor{headingblue}{RGB}{31,73,125}
+\titleformat{\section}{\normalfont\Large\bfseries\color{headingblue}}{\thesection.}{0.5em}{}
+\titleformat{\subsection}{\normalfont\large\bfseries\itshape\color{headingblue}}{\thesubsection}{0.5em}{}
+\setlength{\parskip}{0.4em}
+\setlength{\parindent}{1.2em}
+\captionsetup{font=small,labelfont={bf,it},textfont=it}
+\sisetup{round-mode=places,round-precision=3,table-format=3.3}
+
+% ---------- Title ----------
+\title{\vspace{-1.5em}\bfseries\color{headingblue}\Large
+Predicting Superconducting Critical Temperature from Engineered
+Material Descriptors: A Comparative Machine Learning Study}
+
+\author{
+Israfil Saygitov\thanks{Independent Researcher. Corresponding author.}
+\and
+Nursan Omarov\thanks{Independent Researcher.}
+}
+\date{}
+
+\begin{document}
+\maketitle
+
+% ---------- Abstract ----------
+\begin{abstract}
+\noindent
+Superconducting materials, which conduct electric current with zero resistance below a critical
+temperature ($T_c$), represent one of the most promising avenues for reducing energy losses in
+electrical infrastructure. Identifying material compositions associated with a higher $T_c$ remains a
+central open problem in condensed matter physics and materials science. This study investigates whether
+machine learning models can predict $T_c$ from a set of $81$ engineered numerical descriptors derived
+from elemental and compositional properties. Six regression models --- Linear Regression, Decision Tree,
+Random Forest, Gradient Boosting, XGBoost, and a deep multilayer perceptron (MLP) --- were trained and
+evaluated on a public superconductivity dataset ($21{,}263$ samples after cleaning) using an 80/20
+train--test split and 5-fold cross-validation. Random Forest achieved the strongest performance
+(cross-validated RMSE $\approx 9.70$~K, test $R^2 \approx 0.930$), narrowly ahead of XGBoost
+(CV-RMSE $\approx 9.88$~K), while the deep MLP placed in the middle of the field
+(test $R^2 \approx 0.879$) and Linear Regression performed weakest ($R^2 \approx 0.738$), indicating a
+strongly nonlinear relationship between descriptors and $T_c$ on which tree ensembles remain especially
+strong. Impurity-based and permutation feature importance agree that thermal-conductivity-,
+atomic-mass-, and valence-related descriptors are the most informative predictors, and Principal
+Component Analysis confirms that the dataset contains non-random structure related to $T_c$. We
+additionally quantify a data-leakage risk: $28.7\%$ of feature rows are exact duplicates, and removing
+them lowers Random Forest performance to $R^2 \approx 0.911$, so the leakage-controlled figure is the
+more conservative estimate. We discuss the limitations of this proof-of-concept pipeline and outline
+directions for developing it into a screening tool for candidate superconducting materials.
+
+\vspace{0.6em}
+\noindent\textit{Keywords:} superconductivity; critical temperature; machine learning; random forest;
+XGBoost; deep learning; feature importance; materials informatics.
+\end{abstract}
+
+% ---------- 1. Introduction ----------
+\section{Introduction}
+
+\subsection{Motivation}
+In 2026, severe flooding struck the Republic of Dagestan, Russia, and local officials attributed part of
+the resulting infrastructure damage to degraded electrical wiring --- cables that wear out, overheat, and
+fail under stress. This observation motivated the present study: what if electrical grids did not lose
+energy to resistance at all?
+
+Superconductors are materials that conduct electric current with zero electrical resistance, meaning they
+do not dissipate energy as heat and, in principle, do not degrade through resistive overheating in the way
+conventional conductors do. Widespread use of superconducting materials in power infrastructure could
+substantially improve grid reliability and efficiency. The central obstacle to this vision is that most
+known superconductors only exhibit this property at extremely low temperatures, which makes them
+impractical for large-scale real-world deployment.
+
+Identifying materials with a higher critical temperature ($T_c$) --- the temperature below which
+superconductivity occurs --- is therefore one of the most important open problems in modern condensed
+matter physics and materials science. This work applies machine learning methods to predict $T_c$ from
+engineered material descriptors, as an initial step toward a computational screening pipeline for
+promising superconducting candidates.
+
+\subsection{Objectives}
+The specific objectives of this study are to: (i) compare the predictive performance of six regression
+algorithms --- including a deep neural network --- on a public superconductivity dataset; (ii) identify
+which engineered descriptors are most informative for predicting $T_c$; and (iii) assess, through
+correlation analysis, dimensionality reduction, and a duplicate-leakage check, whether the dataset
+exhibits structure consistent with a learnable physical relationship and how robust the reported
+performance is.
+
+% ---------- 2. Data and Methods ----------
+\section{Data and Methods}
+
+\subsection{Dataset}
+The dataset used in this study consists of engineered numerical descriptors for superconducting materials,
+together with the corresponding critical temperature (\texttt{critical\_temp}) as the target variable. Each
+descriptor is derived from elemental and compositional properties of the constituent atoms (e.g., atomic
+mass, valence, thermal conductivity, electron affinity, atomic radius, and fusion heat), aggregated using
+statistics such as mean, weighted mean, geometric mean, standard deviation, range, and entropy across the
+elements present in each material. The raw dataset contained $21{,}263$ usable records after
+preprocessing, with $81$ descriptor features. The data originate from the UCI Machine Learning Repository
+superconductivity dataset of Hamidieh~\cite{hamidieh2018}.
+
+\subsection{Preprocessing}
+One column, \texttt{wtd\_std\_Density}, was coerced to a numeric type, and any rows with resulting invalid
+or missing values were removed. The target variable was set to \texttt{critical\_temp}, and all remaining
+numerical columns were used as input features. The cleaned dataset was split into training ($80\%$) and
+test ($20\%$) subsets using a fixed random seed to ensure reproducibility.
+
+\subsection{Models}
+Six regression models were trained and compared:
+\begin{itemize}
+  \item \textbf{Linear Regression}, as a baseline linear model.
+  \item \textbf{Decision Tree Regressor}, a single nonlinear tree-based model.
+  \item \textbf{Random Forest Regressor} ($300$ estimators), an ensemble of bagged decision trees.
+  \item \textbf{Gradient Boosting Regressor}, a sequential boosting ensemble.
+  \item \textbf{XGBoost Regressor} ($300$ estimators, max depth $6$, learning rate $0.05$,
+        \texttt{subsample} $0.8$, \texttt{colsample\_bytree} $0.8$), a regularized gradient boosting
+        implementation.
+  \item \textbf{Multilayer Perceptron (MLP)}, a deep feed-forward neural network implemented in PyTorch,
+        with three hidden layers ($256$--$128$--$64$ units), batch normalization, ReLU activations, and
+        dropout regularization. Inputs and target were standardized using training-set statistics, and the
+        network was trained with the Adam optimizer under mean-squared-error loss with early stopping on an
+        internal validation split.
+\end{itemize}
+
+All models were evaluated on the held-out test set using mean absolute error (MAE), mean squared error
+(MSE), root mean squared error (RMSE), and the coefficient of determination ($R^2$). To assess the
+stability of each model's performance, 5-fold cross-validation was additionally performed on the training
+set, reporting the mean and standard deviation of the cross-validated RMSE (CV-RMSE, CV-STD).
+
+\subsection{Feature Importance and Structural Analysis}
+To interpret the best-performing model, impurity-based feature importances were extracted from the Random
+Forest model. Because impurity-based importances can be biased when features are correlated, permutation
+importance was additionally computed on the held-out test set as a robustness check. In parallel, Pearson
+correlation coefficients between each descriptor and \texttt{critical\_temp} were computed across the full
+cleaned dataset. Finally, Principal Component Analysis (PCA) was applied to the standardized feature matrix
+to visualize the two-dimensional structure of the dataset with respect to critical temperature.
+
+\subsection{Duplicate and Leakage Analysis}
+Engineered superconductivity descriptors are known to contain many near-identical compositions. Because a
+random train--test split can place near-duplicate materials in both partitions and leak information, we
+counted exact-duplicate feature rows and re-evaluated the best model on a deduplicated version of the
+dataset as a conservative robustness check.
+
+% ---------- 3. Results ----------
+\section{Results}
+
+\subsection{Model Comparison}
+Table~\ref{tab:models} summarizes the performance of all six models on the test set and under 5-fold
+cross-validation. Random Forest achieved the best overall performance (test MAE $=5.08$~K,
+RMSE $=8.97$~K, $R^2 = 0.930$; CV-RMSE $=9.70 \pm 0.25$~K), closely followed by XGBoost
+(CV-RMSE $=9.88 \pm 0.28$~K); the two tree ensembles are statistically very close. The deep MLP placed in
+the middle of the field (test $R^2 = 0.879$, CV-RMSE $=12.17 \pm 0.23$~K), outperforming a single Decision
+Tree and Gradient Boosting on cross-validated RMSE but not matching the leading tree ensembles. Linear
+Regression performed markedly worse than all nonlinear models ($R^2 = 0.738$, CV-RMSE $=17.70$~K).
+
+\begin{table}[htbp]
+\centering
+\caption{Performance comparison of six regression models on the test set, sorted by cross-validated RMSE.}
+\label{tab:models}
+\begin{tabular}{l S S S S S S}
+\toprule
+\textbf{Model} & {\textbf{MAE}} & {\textbf{MSE}} & {\textbf{RMSE}} & {\textbf{$R^2$}}
+ & {\textbf{CV-RMSE}} & {\textbf{CV-STD}} \\
+\midrule
+Random Forest        & 5.076 & 80.452  & 8.970  & 0.930 & 9.700  & 0.253 \\
+XGBoost              & 5.811 & 86.037  & 9.276  & 0.925 & 9.876  & 0.280 \\
+MLP (Deep Learning)  & 7.697 & 139.165 & 11.797 & 0.879 & 12.173 & 0.226 \\
+Decision Tree        & 6.090 & 139.449 & 11.809 & 0.879 & 12.539 & 0.296 \\
+Gradient Boosting    & 8.501 & 152.150 & 12.335 & 0.868 & 12.794 & 0.149 \\
+Linear Regression    & 13.211& 302.008 & 17.378 & 0.738 & 17.699 & 0.253 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The gap between Linear Regression and the tree-based ensembles suggests that the relationship between the
+engineered descriptors and critical temperature is strongly nonlinear. Notably, the deep MLP --- despite
+its capacity to model nonlinear interactions --- did not surpass Random Forest or XGBoost, consistent with
+the broader observation that gradient-boosted and bagged tree ensembles remain strong baselines for
+tabular data with heterogeneous engineered features.
+
+\subsection{Feature Importance}
+Table~\ref{tab:impurity} lists the descriptors with the highest impurity-based importance in the Random
+Forest model. A single feature, \texttt{range\_ThermalConductivity}, dominates the importance ranking
+($0.536$), followed by \texttt{wtd\_gmean\_ThermalConductivity} ($0.126$). The remaining top features
+relate to atomic mass, valence, and density, together accounting for a much smaller share of total
+importance.
+
+\begin{table}[htbp]
+\centering
+\caption{Top 8 features by Random Forest impurity-based importance.}
+\label{tab:impurity}
+\begin{tabular}{l S[table-format=1.3]}
+\toprule
+\textbf{Feature} & {\textbf{Importance}} \\
+\midrule
+range\_ThermalConductivity        & 0.536 \\
+wtd\_gmean\_ThermalConductivity   & 0.126 \\
+std\_atomic\_mass                 & 0.022 \\
+wtd\_gmean\_Valence               & 0.019 \\
+std\_Density                      & 0.011 \\
+mean\_Density                     & 0.011 \\
+wtd\_entropy\_ThermalConductivity & 0.011 \\
+gmean\_ElectronAffinity           & 0.011 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+We note that this pronounced concentration of importance in thermal-conductivity-related descriptors may
+partly reflect multicollinearity among related features (e.g., \texttt{range\_}, \texttt{wtd\_gmean\_}, and
+\texttt{wtd\_std\_ThermalConductivity} are derived from the same underlying property) rather than a single
+dominant physical mechanism; this is discussed further in Section~\ref{sec:discussion}.
+
+\subsection{Permutation Importance}
+To guard against the known bias of impurity-based importance under feature correlation, permutation
+importance was computed on the held-out test set (Table~\ref{tab:perm}). The two measures agree closely:
+\texttt{range\_ThermalConductivity} remains dominant ($0.722 \pm 0.019$), followed by
+\texttt{wtd\_gmean\_ThermalConductivity}, \texttt{std\_atomic\_mass}, and \texttt{wtd\_gmean\_Valence}. The
+agreement between two independent importance measures strengthens confidence that these descriptors carry
+genuine predictive signal rather than being artifacts of a single scoring method.
+
+\begin{table}[htbp]
+\centering
+\caption{Top 8 features by Random Forest permutation importance (mean $\pm$ std over 5 repeats,
+held-out test set).}
+\label{tab:perm}
+\begin{tabular}{l c}
+\toprule
+\textbf{Feature} & \textbf{Permutation importance} \\
+\midrule
+range\_ThermalConductivity        & $0.722 \pm 0.019$ \\
+wtd\_gmean\_ThermalConductivity   & $0.079 \pm 0.005$ \\
+std\_atomic\_mass                 & $0.039 \pm 0.002$ \\
+wtd\_gmean\_Valence               & $0.033 \pm 0.001$ \\
+mean\_Density                     & $0.018 \pm 0.001$ \\
+entropy\_FusionHeat               & $0.015 \pm 0.001$ \\
+entropy\_Density                  & $0.014 \pm 0.000$ \\
+range\_atomic\_radius             & $0.014 \pm 0.001$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Correlation Analysis}
+Pearson correlation coefficients between individual descriptors and \texttt{critical\_temp} ranged from
+approximately $-0.63$ to $+0.72$. The strongest positive correlations were observed for
+\texttt{wtd\_std\_ThermalConductivity} ($r=0.721$), \texttt{range\_ThermalConductivity} ($r=0.688$),
+\texttt{range\_atomic\_radius} ($r=0.654$), and \texttt{std\_ThermalConductivity} ($r=0.654$). The
+strongest negative correlations were observed for \texttt{wtd\_mean\_Valence} ($r=-0.632$) and
+\texttt{wtd\_gmean\_Valence} ($r=-0.616$). These results are broadly consistent with the Random Forest
+feature importance ranking and indicate that thermal-conductivity-, radius-, and valence-related
+descriptors carry meaningful information about critical temperature, although correlation alone does not
+establish causal physical relationships.
+
+\subsection{Distribution and Structure of the Target Variable}
+The distribution of \texttt{critical\_temp} across the dataset is right-skewed (skewness $\approx 0.86$;
+mean $\approx 34.4$~K, median $\approx 20.0$~K, maximum $185$~K): most materials exhibit relatively low
+critical temperatures, with a smaller number of materials reaching substantially higher values. This
+asymmetry means the RMSE is dominated by the harder-to-predict high-$T_c$ tail and suggests that the
+dataset may contain multiple underlying material regimes with distinct superconducting behavior.
+
+A two-dimensional PCA projection of the standardized feature matrix explained approximately $49.4\%$ of
+total variance (PC1: $38.9\%$, PC2: $10.5\%$). Materials with higher critical temperatures tended to
+occupy specific regions of this projection rather than being uniformly distributed, indicating that the
+engineered descriptors capture structure related to critical temperature, although the moderate explained
+variance implies this two-dimensional view captures only part of the dataset's complexity.
+
+\subsection{Duplicate and Leakage Robustness}
+A large fraction of the dataset consists of exact-duplicate feature vectors: $6{,}093$ of $21{,}263$ rows
+($28.7\%$) are exact duplicates of another row in feature space. Removing these duplicates leaves $15{,}170$
+unique rows. Retraining Random Forest on this deduplicated dataset lowers performance from
+$R^2 = 0.930$ (RMSE $8.97$~K) to $R^2 = 0.911$ (RMSE $10.01$~K). Because this check removes only
+\emph{exact} duplicates and not the many additional \emph{near}-duplicate compositions, the true
+leakage-controlled performance is likely somewhat lower still, and the deduplicated figure should be
+regarded as the more conservative and honest estimate.
+
+% ---------- 4. Discussion ----------
+\section{Discussion and Limitations}
+\label{sec:discussion}
+The results indicate that engineered elemental descriptors carry substantial predictive signal for
+critical temperature, and that tree-based ensemble methods --- particularly Random Forest and XGBoost ---
+capture this signal considerably better than a linear model and, on this dataset, better than a
+conventional deep neural network. However, several limitations should be considered when interpreting
+these results.
+
+\begin{itemize}
+  \item The dataset uses engineered statistical descriptors rather than direct experimental or
+        first-principles physical measurements, which limits the physical interpretability of the learned
+        relationships.
+  \item A large fraction of rows are exact-duplicate feature vectors ($28.7\%$), and many more are
+        near-duplicates. A random split therefore leaks similar compositions across train and test and can
+        optimistically bias reported performance; the deduplicated result in Section~3.6 partially
+        quantifies this effect, but a fully composition-grouped split would be required to remove it
+        entirely.
+  \item Feature importance and correlation analysis identify statistically predictive descriptors but do
+        not establish causal physical mechanisms, particularly given the strong multicollinearity among
+        thermal-conductivity-related features.
+  \item Hyperparameters for the boosting methods and the neural network were only lightly tuned, so the
+        relative ranking among the top models may shift under more systematic tuning.
+  \item PCA is a linear dimensionality-reduction technique used here purely for visualization; it does not
+        provide a direct physical interpretation of the principal components.
+\end{itemize}
+
+For these reasons, the present results should be regarded as a proof of concept rather than a definitive
+scientific conclusion about the physical determinants of superconducting critical temperature.
+
+% ---------- 5. Future Work ----------
+\section{Future Work}
+\begin{itemize}
+  \item Testing the pipeline on additional, independently sourced superconductivity datasets.
+  \item Using composition-grouped or deduplicated splitting to obtain leakage-free performance estimates.
+  \item Combining engineered descriptors with more direct physical or first-principles measurements
+        (e.g., density-functional-theory-derived features).
+  \item Systematic hyperparameter tuning for all models, including the neural network architecture.
+  \item Developing a ranking-based screening pipeline to prioritize candidate materials for experimental
+        investigation.
+  \item Adding uncertainty estimation (e.g., quantile regression or ensemble variance) to model
+        predictions.
+\end{itemize}
+
+% ---------- 6. Conclusion ----------
+\section{Conclusion}
+This study demonstrates that machine learning models can predict superconducting critical temperature from
+engineered material descriptors with meaningful accuracy. Among six compared models, Random Forest achieved
+the best performance (cross-validated RMSE $\approx 9.70$~K, $R^2 \approx 0.930$), narrowly outperforming
+XGBoost, while a deep multilayer perceptron placed in the middle of the field --- confirming that
+gradient-boosted and bagged tree ensembles remain strong baselines for tabular materials data. The
+magnitude of improvement over the linear baseline indicates that the relationship between engineered
+descriptors and critical temperature is strongly nonlinear. Impurity-based and permutation feature
+importance, correlation analysis, and PCA visualization consistently point to thermal-conductivity-,
+valence-, mass-, and radius-related descriptors as informative predictors, though these findings should be
+interpreted as statistical associations rather than confirmed physical mechanisms. A duplicate analysis
+further shows that some of the headline accuracy reflects near-duplicate compositions shared across the
+split, so the leakage-controlled estimate ($R^2 \approx 0.911$) is the more conservative figure. Overall,
+this work serves as a proof-of-concept pipeline for machine-learning-assisted superconductor screening and
+provides a foundation for future extensions toward more physically grounded materials discovery workflows.
+
+% ---------- References ----------
+\begin{thebibliography}{9}
+\bibitem{hamidieh2018}
+Hamidieh, K. A data-driven statistical model for predicting the critical temperature of a superconductor.
+\textit{Computational Materials Science}, 154, 346--354 (2018).
+
+\bibitem{scikit}
+Pedregosa, F. et al. Scikit-learn: Machine Learning in Python.
+\textit{Journal of Machine Learning Research}, 12, 2825--2830 (2011).
+
+\bibitem{xgboost}
+Chen, T. \& Guestrin, C. XGBoost: A Scalable Tree Boosting System.
+\textit{Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining},
+785--794 (2016).
+
+\bibitem{rf}
+Breiman, L. Random Forests. \textit{Machine Learning}, 45(1), 5--32 (2001).
+
+\bibitem{pytorch}
+Paszke, A. et al. PyTorch: An Imperative Style, High-Performance Deep Learning Library.
+\textit{Advances in Neural Information Processing Systems}, 32, 8024--8035 (2019).
+
+\bibitem{pca}
+Jolliffe, I. T. \& Cadima, J. Principal component analysis: a review and recent developments.
+\textit{Philosophical Transactions of the Royal Society A}, 374(2065) (2016).
+\end{thebibliography}
+
+\end{document}
